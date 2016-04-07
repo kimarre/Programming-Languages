@@ -2,8 +2,14 @@
 (require rackunit)
 
 ; #### Problem 2.3.3 ####
-; ------------------------------- TODO: do the right one!
+; Calculates the total income the attendees of a theater produce
+; (: total-profit [Number -> Number])
+(define (total-profit numPeople)
+  (- (* 5 numPeople) (+ 20 (* numPeople .5))))
 
+(check-equal? (total-profit 5) 2.5)
+(check-equal? (total-profit 2) -11.0)
+(check-equal? (total-profit 20) 70.0)
 
 ; #### Problem 3.3.3 ####
 ; Calculates the total surface area
@@ -34,6 +40,7 @@
 (check-equal? (trick-minutes (Card-Trick 1 2)) 4)
 (check-equal? (trick-minutes (Guillotine #false #false)) 10)
 (check-equal? (trick-minutes (Guillotine #true #true)) 20)
+
 
 ; #### Low-degree Polynomials ####
 
@@ -77,16 +84,23 @@
 (define l3 (Leaf 'grumpycat))
 
 (define n1 (Node l1 l2))
-(define n2 (n1 l3))
+(define n2 (Node n1 l3))
+
 
 ; #### Min-Depth ####
 ; determines the length of the shortest path to a leaf
+; (: min-depth [tree -> Number])
 (define (min-depth tree)
-  (traverse tree 0))
+  (traverse tree 1))
 
 (define (traverse tree num)
+  (match tree
+      [(struct Node(l r))
+        (traverse l (+ 1 num))
+        (traverse r (+ 1 num))]
+      [(struct Leaf(s)) num]))
   
-
+(check-equal? (min-depth n2) 2)
 
 
 
