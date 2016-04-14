@@ -19,7 +19,7 @@
 ; where chip is a number
 (struct Intel (chip)#:transparent)
 (struct AMD (chip)#:transparent)
-(struct ARM (chip)#:transparent)
+(struct ARM (chip)#:transparent) 
 
 
 

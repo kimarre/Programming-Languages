@@ -63,11 +63,12 @@
 
 ; ====================================================================
 ; Structures
-(struct Furniture (U desk))
+(struct Furniture (U desk) #:transparent)
 (struct Desk (width height depth) #:transparent)
 (struct Bookshelf (depth numShelves shelfWidth) #:transparent)
 (Desk 4 3 2)
 
+; Calculates the amount of floorspace taken up by a piece of furniture
 (define (furniture-footprint item)
   (match item
     [(struct Desk (w h d)) (* w d)]

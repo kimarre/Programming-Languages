@@ -1,6 +1,10 @@
 #lang racket
 (require rackunit)
 
+; Kim Arre
+; CPE 430 - Clements
+; Spring 2016
+
 ; #### Problem 2.3.3 ####
 ; Calculates the total income the attendees of a theater produce
 ; (: total-profit [Number -> Number])
@@ -31,34 +35,35 @@
 ; (: trick-minutes [Trick -> Number])
 (define (trick-minutes trick)
   (match trick
-    [(Card-Trick d v) (* 2 v d)]
+    [(Card-Trick d v) (* d (expt 2 v))]
     [(Guillotine r b)
        (cond
          [(equal? b #true) 20]
          [else 10])]))
 
 (check-equal? (trick-minutes (Card-Trick 1 2)) 4)
+(check-equal? (trick-minutes (Card-Trick 3 4)) 48)
 (check-equal? (trick-minutes (Guillotine #false #false)) 10)
 (check-equal? (trick-minutes (Guillotine #true #true)) 20)
 
 
 ; #### Low-degree Polynomials ####
 
-; ((define-type) Polynomial (U linear quadratic))
+; ((define-type) Polynomial (U Linear Quadratic))
 ; where a, b, and c are the coefficients
-(struct linear (a b) #:transparent)       ; a may be zero
-(struct quadratic (a b c) #:transparent)  ; a may not be zero
+(struct Linear (a b) #:transparent)       ; a may be zero
+(struct Quadratic (a b c) #:transparent)  ; a may not be zero
 
 ; Produces the result of plugging in the value x for the equation
 ; (: interp [Polynomial Number -> Number])
 (define (interp polynomial x)
   (match polynomial
-    [(struct linear (a b)) (+ (* a x) b)]
-    [(struct quadratic (a b c)) (+ (* a x x) (* b x) c)]))
+    [(struct Linear (a b)) (+ (* a x) b)]
+    [(struct Quadratic (a b c)) (+ (* a x x) (* b x) c)]))
 
-(check-equal? (interp (linear 2 3) 2) 7)
-(check-equal? (interp (linear 0 1) 2) 1)
-(check-equal? (interp (quadratic 2 3 4) 2) 18)
+(check-equal? (interp (Linear 2 3) 2) 7)
+(check-equal? (interp (Linear 0 1) 2) 1)
+(check-equal? (interp (Quadratic 2 3 4) 2) 18)
 
 
 ; #### Derivative ####
@@ -66,11 +71,11 @@
 ; (: derivative [polynomial] -> polynomial)
 (define (derivative polynomial)
   (match polynomial
-    [(struct linear (a b)) (linear 0 a)]
-    [(struct quadratic (a b c)) (linear (* 2 a) b)]))
+    [(struct Linear (a b)) (Linear 0 a)]
+    [(struct Quadratic (a b c)) (Linear (* 2 a) b)]))
 
-(check-equal? (derivative (linear 2 3)) (linear 0 2))
-(check-equal? (derivative (quadratic 2 3 4)) (linear 4 3))
+(check-equal? (derivative (Linear 2 3)) (Linear 0 2))
+(check-equal? (derivative (Quadratic 2 3 4)) (Linear 4 3))
   
 
 ; #### Binary Tree ####
@@ -91,36 +96,42 @@
 ; determines the length of the shortest path to a leaf
 ; (: min-depth [tree -> Number])
 (define (min-depth tree)
-  (traverse tree 1))
+  (traverse tree 0))
 
 (define (traverse tree num)
   (match tree
       [(struct Node(l r))
-        (traverse l (+ 1 num))
-        (traverse r (+ 1 num))]
+        (min (traverse l (+ 1 num)) (traverse r (+ 1 num)))]
       [(struct Leaf(s)) num]))
   
-(check-equal? (min-depth n2) 2)
+(check-equal? (min-depth n2) 1)
 
 
+; #### Traversal ####
+; Produces a list representing an in-order traversal of symbols at the leaves of a binary tree
+; (: in-order [tree -> list])
+(define (in-order tree)
+  (match tree
+    [(struct Node(l r))
+       (append (in-order l) (in-order r))]
+    [(struct Leaf(s)) (list s)]
+    [else (list)]))
 
+       
 
+; Tests for in-order
+(define H (Leaf 'H))
+(define I (Leaf 'I))
+(define E (Leaf 'E))
+(define F (Leaf 'F))
+(define J (Leaf 'J))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-         
+(define D (Node H I))
+(define B (Node D E))
+(define G (Node J null))
+(define C (Node F G))
+(define A (Node B C))
+ 
+(check-equal? (in-order A) (list 'H 'I 'E 'F 'J))
+(check-equal? (in-order B) (list 'H 'I 'E))
+      
