@@ -24,12 +24,12 @@
 (define (num-nums [a : ArithC]) : Number
   (match a
     [(numC n) 1]
-    [(plusC l r) 2]
-    [(multC l r) 2]))
+    [(plusC l r) (+ (num-nums l) (num-nums r))]
+    [(multC l r) (+ (num-nums l) (num-nums r))]))
 
 (check-equal? (num-nums (numC 5)) 1)
-(check-equal? (num-nums (plusC (numC 2) (numC 1))) 2)
-(check-equal? (num-nums (multC (numC 1) (numC 1))) 2)
+(check-equal? (num-nums (plusC (multC(numC 2) (numC 2)) (numC 1))) 3)
+(check-equal? (num-nums (multC (numC 3) (numC 2))) 2)
 
 
 (define-type ArithS (U numS plusS bminusS uminusS multS))
@@ -106,7 +106,7 @@
 (define (zip [l1 : (Listof Number)] [l2 : (Listof Number)])
   (cond
     [(empty? l1) empty]
-    [else (append (list (list (first l1) (first l2))) (zip (rest l1) (rest l2)))]))
+    [else (cons (list (first l1) (first l2)) (zip (rest l1) (rest l2)))]))
 
 (check-equal? (zip (list 1 2 3) (list 4 5 6)) (list (list 1 4) (list 2 5) (list 3 6)))
 
