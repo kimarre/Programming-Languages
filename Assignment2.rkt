@@ -3,7 +3,7 @@
 
 ; TODO
 ; [x] Binop datatype
-; [ ] Multiple function arguments
+; [.] Multiple function arguments
 ; [ ] Main
 ; [x] Conditional: ifleq0
 ; [ ] Finish EBNF
@@ -15,13 +15,12 @@
 ;    [x] interp
 ;    [x] top-interp
 
-(define-type ExprC (U NumC IdC BinopC AppC ifleq0C))
+(define-type ExprC (U NumC IdC BinopC AppC ifleq0C FundefC))
 (struct NumC ([n : Real]) #:transparent)
 (struct IdC ([x : Symbol]) #:transparent)
 (struct AppC ([fun : Symbol] [arg : ExprC]) #:transparent)
 (struct ifleq0C ([n : ExprC] [then : ExprC] [else : ExprC]) #:transparent)
 (struct FundefC ([name : Symbol] [args : (Listof Symbol)] [body : ExprC]) #:transparent)
-
 (struct BinopC ([name : Symbol] [left : ExprC] [right : ExprC]) #:transparent)
 
 ;symbol -> actual operator ex. '+ +
@@ -30,40 +29,21 @@
                     'mult *
                     'minus -
                     'divide /))
-  
 
 (define funs (list))
 
 ;(check-equal? {ifleq0C -1 { #true} {#false} } #true)
 
 ;; Evaluates an Sexp by calling parse, desugar and interp
-#;((: top-interp (Sexp -> Real))
+#;(
+(: top-interp (Sexp -> Real))
 (define (top-interp fun-sexps)
   (interp-fns (parse-prog fun-sexps)))
-
 
 (check-equal? (top-interp '{+ 1 2}) 3)
 (check-equal? (top-interp '{- 6 2}) 4)
 (check-equal? (top-interp '{* 6 2}) 12)
-
-
-(check-equal? (top-interp
-               '{{func odd {n} {
-                                {{ifleq0 n
-                                         {ifleq0 {+ n 1} ; +1 to differentiate -1 (odd) from 0 (even) in ifleq0
-                                                 1
-                                                 0}
-                                         {odd {- n 2}}}}}}
-                 {func even {n} {
-                                 {ifleq0 n
-                                         {ifleq0 {+ n 1}
-                                                 0
-                                                 1}
-                                         {even {- n 2}}}}}
-                 {func main {} {even 4}}}) 1)
 )
-
-
 
 ;; Interpret the plus, mult, and num ArithC's
 (: interp (ExprC (Listof FundefC) -> Real))
