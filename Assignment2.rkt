@@ -118,10 +118,15 @@
 (define (parse-fundef s)
   (match s
     [(list 'func (? symbol? name) (list (? symbol? args) ...) body)
-     (FundefC name args (parse body))]))
+     (cond
+       [(not (isReserved? name))
+        (FundefC name args (parse body))])]
+    [other
+     (error "DFLY: Oh noes, input to parse-fundef not well-formed")]))
 
 (check-equal? (parse-fundef '{func g {x} {* x 9}}) (FundefC 'g (list 'x) (BinopC 'mult (IdC 'x) (NumC 9))))
-
+(check-exn #px"DFLY: Oh noes, input to parse-fundef not well-formed" (λ () (parse-fundef '{func + () () 13})))
+(check-exn #px"DFLY: Cannot use reserved function name" (λ () (parse-fundef '{func + () 13})))
 
 ;; Turns a list of s-expressions to a list of FundefC's
 ;(: parse-prog ((Listof Sexp) -> (Listof FundefC)))
@@ -142,13 +147,19 @@
   (match exp
     [(NumC n) n]
     [(IdC i) (error "DFLY: Interp should not have encountered an IdC on its own. Undefined variable.")]
-    [(BinopC name l r) ((hash-ref Operations name) (interp l funs) (interp r funs))]
+    [(BinopC name l r)
+     (define rVal (interp r funs))
+     (cond
+       [(and (= 0 rVal) (equal? name 'divide)) (error "DFLY: Cannot divide by 0.")]
+       [else ((hash-ref Operations name) (interp l funs) (interp r funs))])]
     [(AppC f a) (local ([define fd (get-fundef f funs)])
                   (interp (foldl (λ (var val result)
                                    (subst var val result))
                                  (FundefC-body fd) ; initial value
                                  (FundefC-args fd) ; vars to be sub'd
-                                 a)                ; vals to sub in
+                                 (map
+                                  (λ (x) (NumC (interp x funs)))                ; vals to sub in
+                                  a))
                           
                           funs))]
     [(ifleq0C test then el)
@@ -195,3 +206,12 @@
 (check-equal? (top-interp
                '{{func isLessThan1 {x} {ifleq0 x 1 0}}
                  {func main {} {isLessThan1 3}}}) 0)
+
+(check-exn #px"DFLY: Cannot divide by 0" (λ () (top-interp
+                                                '{{func divideByZero {x} (/ x 0)}
+                                                  (func main () (divideByZero 2))})))
+
+(check-exn #px"DFLY: Cannot divide by 0" (λ () (top-interp
+                                                '{{func ignoreit (x) (+ 3 4)}
+                                                  (func main () (ignoreit (/ 1 0)))})))
+
