@@ -26,6 +26,8 @@
               (FundefC 'main (list) (NumC 7))
               ))
 
+(define reserved-ops (list '\ '* '+ '- 'ifleq0))
+
 ;; Look up a function from a list by name given a list of functions
 ;(: get-fundef (IdC (Listof FundefC) -> FundefC))
 (define (get-fundef name funs)
@@ -76,10 +78,23 @@
     [(list '* l r) (BinopC 'mult (parse l) (parse r))]
     [(list '/ l r) (BinopC 'divide (parse l) (parse r))]
     [(list (? symbol? fun) arg ...)
-     (AppC fun (map parse arg))]
+     (cond
+       ;[(equal? #f (findf (λ (arg) (equal? arg fun))
+       ;                   reserved-ops))
+       [(equal? '/ fun) (error "DFLY: Cannot use reserved function name.")]
+       [(equal? '* fun) (error "DFLY: Cannot use reserved function name.")]
+       [(equal? '+ fun) (error "DFLY: Cannot use reserved function name.")]
+       [(equal? '- fun) (error "DFLY: Cannot use reserved function name.")]
+       [(equal? 'ifleq0 fun) (error "DFLY: Cannot use reserved function name.")]
+       [else (AppC fun (map parse arg))])]
     [other (error "DFLY: Oh noes, input not well-formed")]))
 
 (check-exn #px"DFLY: Oh noes, input not well-formed" (λ () (parse '(16))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(/ 3 4 5))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ cat dog poop))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(* 3))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(- 3 4 5))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(ifleq0 3 cat))))
 (check-equal? (parse '{+ 1 2}) (BinopC 'plus (NumC 1) (NumC 2)))
 (check-equal? (parse '{* 2 3}) (BinopC 'mult (NumC 2) (NumC 3)))
 (check-equal? (parse '{- 4 2}) (BinopC 'minus (NumC 4) (NumC 2)))
