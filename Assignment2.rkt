@@ -1,24 +1,13 @@
 #lang racket
 (require rackunit)
 
-; TODO
-; [x] Binop datatype
-; [.] Multiple function arguments
-; [ ] Main
-; [x] Conditional: ifleq0
-; [ ] Finish EBNF
-; Interface:
-;    [x] parse
-;    [.] parse-fundef
-;    [x] parse-prog
-;    [.] interp-fns
-;    [x] interp
-;    [x] top-interp
+; Author: Kim Arre (karre@calpoly.edu)
+; CPE 430 - Spring 2016
 
 ;(define-type ExprC (U NumC IdC BinopC AppC ifleq0C FundefC))
 (struct NumC (n) #:transparent)
 (struct IdC (x) #:transparent)
-(struct AppC (fun arg) #:transparent) ; use of a function (call)
+(struct AppC (fun args) #:transparent) ; use of a function (call)
 (struct ifleq0C (n then else) #:transparent)
 (struct FundefC (name args body) #:transparent)
 (struct BinopC (name left right) #:transparent)
@@ -31,39 +20,13 @@
                     'divide /))
 
 (define funs (list
-              (FundefC 'add-three (list (IdC 'x)) (BinopC 'plus (IdC 'x) (NumC 3)))
-              (FundefC 'double-plus-one (list (IdC 'x)) (BinopC 'plus (BinopC 'mult (NumC 2) (IdC 'x)) (NumC 1)))
-              (FundefC 'add-two-nums (list (IdC 'x) (IdC 'y)) (BinopC 'plus (IdC 'x) (IdC 'y)))
-              (FundefC 'main (list) (NumC 7)) 
+              (FundefC 'add-three (list 'y) (BinopC 'plus (IdC 'y) (NumC 3))) 
+              (FundefC 'double-plus-one (list 'x) (BinopC 'plus (BinopC 'mult (NumC 2) (IdC 'x)) (NumC 1)))
+              (FundefC 'add-two-nums (list 'x 'y) (BinopC 'plus (IdC 'x) (IdC 'y)))
+              (FundefC 'main (list) (NumC 7))
               ))
 
-;; Interpret the plus, mult, and num ArithC's
-;(: interp (ExprC (Listof FundefC) -> Real))
-(define (interp exp funs)
-  (match exp
-    [(NumC n) n]
-    [(BinopC name l r) ((hash-ref Operations name) (interp l funs) (interp r funs))]
-    [(AppC f a) (local ([define fd (get-fundef f funs)])
-                  (interp (foldl (λ (var val result)
-                                   (subst var val result))
-                                 (FundefC-body fd) ; initial value
-                                 (FundefC-args fd) ; vars to be sub'd
-                                 a)                ; vals to sub in
-                          
-                          funs))]
-    [(ifleq0C test then el)
-     (cond
-       [(<= (interp test funs) 0) (interp then funs)]
-       [else (interp el funs)])]))
-
-
-(check-equal? (interp (NumC 6) funs) 6)
-(check-equal? (interp (BinopC 'plus (NumC 2) (NumC 3)) funs) 5)
-(check-equal? (interp (BinopC 'mult (NumC 4) (NumC 2)) funs) 8)
-(check-equal? (interp (ifleq0C (BinopC 'minus (NumC 0) (NumC 1)) (NumC 0) (NumC 1)) funs) 0)
-(check-equal? (interp (ifleq0C (BinopC 'minus (NumC 1) (NumC 0)) (NumC 0) (NumC 1)) funs) 1)
-
-;; Look up a function from a list by name
+;; Look up a function from a list by name given a list of functions
 ;(: get-fundef (IdC (Listof FundefC) -> FundefC))
 (define (get-fundef name funs)
   (match funs
@@ -73,8 +36,9 @@
             fst]
            [else (get-fundef name rst)])]))
 
+(check-exn #px"DFLY: function not found with name: 'mrow" (λ () (get-fundef 'mrow funs)))
 
-;; Interpret main
+
 ;(: interp-fns ((Listof FundefC) -> Real))
 (define (interp-fns complete-funs funs)
   (cond
@@ -82,7 +46,6 @@
      (interp (FundefC-body (first funs)) complete-funs)]
     [else (interp-fns complete-funs (rest funs))]))
 
-;(check-equal? (interp-fns complete-funs funs) 7)
 
 ;; replace instances of 'from' with 'to' in 'in'
 ;(: subst (IdC ExprC ExprC -> ExprC))
@@ -98,9 +61,8 @@
                                       (subst from to arg))
                                     args))]))
 
-; helper for multiple argument subs - interp needs to apply 4 to x, 9 to y, etc
-; but subst needs to sub in 4 for x in as many places as x appears
-
+(check-equal? (subst 'x (NumC 1) (BinopC 'plus (IdC 'x) (NumC 2))) (BinopC 'plus (NumC 1) (NumC 2)))
+(check-equal? (subst 'x (NumC 1) (AppC 'g (list (IdC 'x)))) (AppC 'g (list (NumC 1))))
 
 ;; Parser - Converts a Sexp to an ExprC
 ;(: parse (Sexp -> ExprC))
@@ -135,9 +97,6 @@
 
 (check-equal? (parse-fundef '{func g {x} {* x 9}}) (FundefC 'g (list 'x) (BinopC 'mult (IdC 'x) (NumC 9))))
 
-;(define fundefTest (FundefC 'addStuff 'a 'b {PlusC a b}))
-;(check-equal? (parse-fundef '{func addStuff {a b} {+ a b}})
-;              (FundefC 'addStuff (list 'a 'b) (BinopC 'plus (IdC 'a) (IdC 'b))))
 
 ;; Turns a list of s-expressions to a list of FundefC's
 ;(: parse-prog ((Listof Sexp) -> (Listof FundefC)))
@@ -151,9 +110,49 @@
                            '{func herpderp {a b} {+ a b}}
                            '{func meow {x y} {+ {* x y} 1}}))
               (list herpderpExp meowExp))
-;(struct FundefC ([name : Symbol] [args : Symbol] [body : ExprC]) #:transparent)
+
+;; Interpret the plus, mult, and num ArithC's
+;(: interp (ExprC (Listof FundefC) -> Real))
+(define (interp exp funs)
+  (match exp
+    [(NumC n) n]
+    [(IdC i) (error "DFLY: Interp should not have encountered an IdC on its own. Undefined variable.")]
+    [(BinopC name l r) ((hash-ref Operations name) (interp l funs) (interp r funs))]
+    [(AppC f a) (local ([define fd (get-fundef f funs)])
+                  (interp (foldl (λ (var val result)
+                                   (subst var val result))
+                                 (FundefC-body fd) ; initial value
+                                 (FundefC-args fd) ; vars to be sub'd
+                                 a)                ; vals to sub in
+                          
+                          funs))]
+    [(ifleq0C test then el)
+     (cond
+       [(<= (interp test funs) 0) (interp then funs)]
+       [else (interp el funs)])]))
+
+#;(
+(define fd (FundefC 'add-three (list (IdC 'y)) (BinopC 'plus (IdC 'y) (NumC 3))))
+(define a (list (NumC 4)))
+(check-equal? (foldl (λ (var val result)
+                                   (subst var val result))
+                                 (FundefC-body fd) ; initial value
+                                 (FundefC-args fd) ; vars to be sub'd
+                                 a) 7)
+)
+
+; idC ifleq and appc need to be tested
+(check-exn #px"DFLY: Interp should not have encountered an IdC on its own. Undefined variable."
+           (λ () (interp (IdC 'x) funs)))
+(check-equal? (interp (AppC 'add-three (list (NumC 4))) funs) 7)
+(check-equal? (interp (NumC 6) funs) 6)
+(check-equal? (interp (BinopC 'plus (NumC 2) (NumC 3)) funs) 5)
+(check-equal? (interp (BinopC 'mult (NumC 4) (NumC 2)) funs) 8)
+(check-equal? (interp (ifleq0C (BinopC 'minus (NumC 0) (NumC 1)) (NumC 0) (NumC 1)) funs) 0)
+(check-equal? (interp (ifleq0C (BinopC 'minus (NumC 1) (NumC 0)) (NumC 0) (NumC 1)) funs) 1)
 
 
+;; Interpret main
 
 ;; Evaluates an Sexp by calling parse and interp
 ;(: top-interp ((Listof Sexp) -> Real))
@@ -163,3 +162,11 @@
 (check-equal? (top-interp
                '{{func add-two {x} {+ 2 x}}
                  {func main {} {add-two 4}}}) 6)
+
+(check-equal? (top-interp
+               '{{func add-together {x y} {+ y x}}
+                 {func main {} {add-together 4 2}}}) 6)
+
+(check-equal? (top-interp
+               '{{func isLessThan1 {x} {ifleq0 x 1 0}}
+                 {func main {} {isLessThan1 3}}}) 0)
