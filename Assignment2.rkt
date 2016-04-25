@@ -26,7 +26,6 @@
               (FundefC 'main (list) (NumC 7))
               ))
 
-(define reserved-ops (list '\ '* '+ '- 'ifleq0))
 
 ;; Look up a function from a list by name given a list of functions
 ;(: get-fundef (IdC (Listof FundefC) -> FundefC))
@@ -66,12 +65,26 @@
 (check-equal? (subst 'x (NumC 1) (BinopC 'plus (IdC 'x) (NumC 2))) (BinopC 'plus (NumC 1) (NumC 2)))
 (check-equal? (subst 'x (NumC 1) (AppC 'g (list (IdC 'x)))) (AppC 'g (list (NumC 1))))
 
+(define reserved-ops (list '\ '* '+ '- 'ifleq0))
+
+(define (isReserved? x)
+  (cond
+    [(equal? '/ x) (error "DFLY: Cannot use reserved function name.")]
+    [(equal? '* x) (error "DFLY: Cannot use reserved function name.")]
+    [(equal? '+ x) (error "DFLY: Cannot use reserved function name.")]
+    [(equal? '- x) (error "DFLY: Cannot use reserved function name.")]
+    [(equal? 'ifleq0 x) (error "DFLY: Cannot use reserved function name.")]
+    [else #false]))
+
 ;; Parser - Converts a Sexp to an ExprC
 ;(: parse (Sexp -> ExprC))
 (define (parse sexp)
   (match sexp
     [(? real? n) (NumC n)]
-    [(? symbol? x) (IdC x)]
+    [(? symbol? x)
+     (cond
+       [(not (isReserved? x))
+        (IdC x)])]
     [(list 'ifleq0 test then el) (ifleq0C (parse test) (parse then) (parse el))]
     [(list '+ l r) (BinopC 'plus (parse l) (parse r))]
     [(list '- l r) (BinopC 'minus (parse l) (parse r))]
@@ -79,22 +92,19 @@
     [(list '/ l r) (BinopC 'divide (parse l) (parse r))]
     [(list (? symbol? fun) arg ...)
      (cond
-       ;[(equal? #f (findf (λ (arg) (equal? arg fun))
-       ;                   reserved-ops))
-       [(equal? '/ fun) (error "DFLY: Cannot use reserved function name.")]
-       [(equal? '* fun) (error "DFLY: Cannot use reserved function name.")]
-       [(equal? '+ fun) (error "DFLY: Cannot use reserved function name.")]
-       [(equal? '- fun) (error "DFLY: Cannot use reserved function name.")]
-       [(equal? 'ifleq0 fun) (error "DFLY: Cannot use reserved function name.")]
-       [else (AppC fun (map parse arg))])]
+       [(not (isReserved? fun))
+            (AppC fun (map parse arg))])]
     [other (error "DFLY: Oh noes, input not well-formed")]))
 
 (check-exn #px"DFLY: Oh noes, input not well-formed" (λ () (parse '(16))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(/ 3 4 5))))
+
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ cat dog poop))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(* 3))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(- 3 4 5))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(ifleq0 3 cat))))
+(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ / 3))))
+
 (check-equal? (parse '{+ 1 2}) (BinopC 'plus (NumC 1) (NumC 2)))
 (check-equal? (parse '{* 2 3}) (BinopC 'mult (NumC 2) (NumC 3)))
 (check-equal? (parse '{- 4 2}) (BinopC 'minus (NumC 4) (NumC 2)))
