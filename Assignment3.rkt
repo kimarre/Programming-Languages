@@ -150,23 +150,32 @@
                                  (FundefC-body fd) ; initial value
                                  (FundefC-args fd) ; vars to be sub'd
                                  (map
-                                  (λ (x) (NumC (interp x funs)))                ; vals to sub in
+                                  (λ (x) (NumC (interp x funs))) ; vals to sub in
                                   a))
                           
                           funs))]
        )
+    
     ; Instead of subst, use closure hash
+    ; This was very close, all the pieces are there, just confusing.
+    ; Separate into two helper functions for the map and foldl
+    ; Write good test cases to make sure each is doing what I think,
     [(AppC fun args)
      (match (interp fun env)
-       [(CloV param body clo-env)
-        (interp body
-                (hash-set clo-env param
-                          (map (λ (x) (NumC (interp x env)))
-                               args)))])]
+       [(CloV params body clo-env)
+        (interp (foldl (λ (var val result)
+                         (hash-set clo-env param
+                          (map (λ (x) ((interp x env)))
+                               args))
+                         body)])]
+
     [(ifleq0C test then el)
      (cond
        [(<= (interp test funs) 0) (interp then funs)]
        [else (interp el funs)])]))
+
+
+(define (
 
 ;; Test cases for Interp
 (check-equal? (interp (parse '{+ 3 4}) empty-env) (NumV 7))
