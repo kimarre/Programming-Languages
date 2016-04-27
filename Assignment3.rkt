@@ -12,9 +12,10 @@
 (struct NumC (n) #:transparent)
 (struct IdC (x) #:transparent)
 (struct AppC (fun args) #:transparent) ; use of a function (call)
-(struct ifleq0C (n then else) #:transparent)
+(struct ifC (n then else) #:transparent)
 (struct BinopC (name left right) #:transparent)
 (struct LamC (param body) #:transparent) ; Symbol ExprC
+(struct BooleanC (b) #:transparent)
 
 ;; Value that represents the result of evaluation:
 ; (define-type Value (U NumV CloV))
@@ -25,21 +26,9 @@
                     'plus +
                     'mult *
                     'minus -
-                    'divide /))
-
-;(define funs (list
-;              (FundefC 'add-three (list 'y) (BinopC 'plus (IdC 'y) (NumC 3))) 
-;              (FundefC 'double-plus-one (list 'x) (BinopC 'plus (BinopC 'mult (NumC 2) (IdC 'x)) (NumC 1)))
-;              (FundefC 'add-two-nums (list 'x 'y) (BinopC 'plus (IdC 'x) (IdC 'y)))
-;              (FundefC 'main (list) (NumC 7))
-;              ))
-
-;;(: interp-fns ((Listof FundefC) -> Real))
-;(define (interp-fns complete-funs funs)
-;  (cond
-;    [(string=? (symbol->string (FundefC-name (first funs))) "main")
-;     (interp (FundefC-body (first funs)) complete-funs)]
-;    [else (interp-fns complete-funs (rest funs))]))
+                    'divide /
+                    'eq eq?
+                    '<= <=))
 
 (define reserved-ops (list '\ '* '+ '- 'ifleq0))
 
@@ -50,9 +39,18 @@
     [(equal? '* x) (error "DFLY: Cannot use reserved function name.")]
     [(equal? '+ x) (error "DFLY: Cannot use reserved function name.")]
     [(equal? '- x) (error "DFLY: Cannot use reserved function name.")]
-    [(equal? 'ifleq0 x) (error "DFLY: Cannot use reserved function name.")]
+    [(equal? 'if x) (error "DFLY: Cannot use reserved function name.")]
     [else #false]))
 
+(define (isBooleanVal x)
+  (cond
+    [(equal? x 'true) #true]
+    [(equal? x 'false) #true]
+    [else #false]))
+
+(check-equal? (isBooleanVal 'true) #true)
+(check-equal? (isBooleanVal 'false) #true)
+(check-equal? (isBooleanVal 'pizza) #false)
 
 ; =======================================
 ;                Parse
@@ -66,20 +64,27 @@
      (LamC params (parse body))]
     [(? symbol? x)
      (cond
-       [(not (isReserved? x))
-        (IdC x)])]
-    [(list 'ifleq0 test then el) (ifleq0C (parse test) (parse then) (parse el))]
+       [(isBooleanVal x) (BooleanC x)]
+       [(not (isReserved? x)) (IdC x)])]
+    [(list 'if test then el)
+     ;(cond
+       ;(define testResult (parse test))
+       ;[(boolean? testResult) (ifC (parse test) (parse then) (parse el))]
+       ;[else (error "DFLY: Test for the 'if' must be a boolean")]
+       (ifC (parse test) (parse then) (parse el))]
     [(list '+ l r) (BinopC 'plus (parse l) (parse r))]
     [(list '- l r) (BinopC 'minus (parse l) (parse r))]
     [(list '* l r) (BinopC 'mult (parse l) (parse r))]
     [(list '/ l r) (BinopC 'divide (parse l) (parse r))]
+    [(list 'eq? l r) (BinopC 'eq (parse l) (parse r))]
+    ((list '<= l r) (BinopC '<= (parse l) (parse r)))
     [(list (? symbol? fun) arg ...)
      (cond
        [(not (isReserved? fun))
             (AppC (parse fun) (map parse arg))])]
     [other (error "DFLY: Oh noes, input not well-formed")]))
 
-
+(check-equal? (parse '{lam {a b} true}) (LamC (list 'a 'b) (BooleanC 'true)))
 (check-equal? (parse '{lam {a b} 3}) (LamC (list 'a 'b) (NumC 3)))
 (check-equal? (parse '{lam {x y} {- x y}}) (LamC (list 'x 'y) (BinopC 'minus (IdC 'x) (IdC 'y))))
 
@@ -89,44 +94,18 @@
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ cat dog poop))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(* 3))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(- 3 4 5))))
-(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(ifleq0 3 cat))))
+;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(ifleq0 3 cat))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ / 3))))
 
 (check-equal? (parse '{+ 1 2}) (BinopC 'plus (NumC 1) (NumC 2)))
 (check-equal? (parse '{* 2 3}) (BinopC 'mult (NumC 2) (NumC 3)))
 (check-equal? (parse '{- 4 2}) (BinopC 'minus (NumC 4) (NumC 2)))
 (check-equal? (parse '{/ 6 3}) (BinopC 'divide (NumC 6) (NumC 3)))
+(check-equal? (parse '{eq? 6 6}) (BinopC 'eq (NumC 6) (NumC 6)))
+(check-equal? (parse '{<= 4 5}) (BinopC '<= (NumC 4) (NumC 5)))
 (check-equal? (parse '3) (NumC 3))
 (check-equal? (parse '{g {+ 3 x}}) (AppC (IdC 'g) (list (BinopC 'plus (NumC 3) (IdC 'x)))))
-(check-equal? (parse '{ifleq0 {- 0 x} 0 1}) (ifleq0C (BinopC 'minus (NumC 0) (IdC 'x)) (NumC 0) (NumC 1)))
-
-;; parse an s-expression into a FundefC
-;(: parse-fundef (Sexp -> FundefC))
-;(define (parse-fundef s)
-;  (match s
-;    [(list 'func (? symbol? name) (list (? symbol? args) ...) body)
-;     (cond
-;       [(not (isReserved? name))
-;        (FundefC name args (parse body))])]
-;    [other
-;     (error "DFLY: Oh noes, input to parse-fundef not well-formed")]))
-;
-;(check-equal? (parse-fundef '{func g {x} {* x 9}}) (FundefC 'g (list 'x) (BinopC 'mult (IdC 'x) (NumC 9))))
-;(check-exn #px"DFLY: Oh noes, input to parse-fundef not well-formed" (λ () (parse-fundef '{func + () () 13})))
-;(check-exn #px"DFLY: Cannot use reserved function name" (λ () (parse-fundef '{func + () 13})))
-
-;; Turns a list of s-expressions to a list of FundefC's
-;(: parse-prog ((Listof Sexp) -> (Listof FundefC)))
-;(define (parse-prog s)
-;   (map parse-fundef s))
-;
-;(define herpderpExp (FundefC 'herpderp (list 'a 'b) (BinopC 'plus (IdC 'a) (IdC 'b))))
-;(define meowExp (FundefC 'meow (list 'x 'y) (BinopC 'plus (BinopC 'mult (IdC 'x) (IdC 'y)) (NumC 1))))
-;
-;(check-equal? (parse-prog (list
-;                           '{func herpderp {a b} {+ a b}}
-;                           '{func meow {x y} {+ {* x y} 1}}))
-;              (list herpderpExp meowExp))
+;(check-equal? (parse '{if {- 0 x} 0 1}) (ifC (BinopC 'minus (NumC 0) (IdC 'x)) (NumC 0) (NumC 1)))
 
 
 ; =======================================
@@ -156,13 +135,7 @@
                         (hash-set new-env param arg))
                       clo-env
                       params
-                      (interp-args args env)))])]
-    
-;    [(ifleq0C test then el)
-;     (cond
-;       [(<= (interp test env) 0) (interp then env)]
-;       [else (interp el env)])]
-    ))
+                      (interp-args args env)))])]))
 
 
 ;; Test cases for Interp
@@ -210,33 +183,10 @@
    (check-equal? (interp (ifleq0C (BinopC 'minus (NumC 1) (NumC 0)) (NumC 0) (NumC 1)) funs) 1)
 )
 
-;; Evaluates an Sexp by calling parse and interp - Interpret main
-;(: top-interp ((Listof Sexp) -> Real))
-;(define (top-interp fun-sexps)
-;  (interp-fns (parse-prog fun-sexps) (parse-prog fun-sexps)))
 
-;(check-equal? (top-interp
-;               '{{func add-two {x} {+ 2 x}}
-;                 {func main {} {add-two 4}}}) 6)
-;
-;(check-equal? (top-interp
-;               '{{func add-together {x y} {+ y x}}
-;                 {func main {} {add-together 4 2}}}) 6)
-;
-;(check-equal? (top-interp
-;               '{{func isLessThan1 {x} {ifleq0 x 1 0}}
-;                 {func main {} {isLessThan1 3}}}) 0)
-;
-;(check-exn #px"DFLY: Cannot divide by 0" (λ () (top-interp
-;                                                '{{func divideByZero {x} (/ x 0)}
-;                                                  (func main () (divideByZero 2))})))
-;
-;(check-exn #px"DFLY: Cannot divide by 0" (λ () (top-interp
-;                                                '{{func ignoreit (x) (+ 3 4)}
-;                                                  (func main () (ignoreit (/ 1 0)))})))
-
-
+; parse {with 4} is valid (same for interp)
 ; binop as function is valid for parser but not interpreter
+
 ; nested functions are just lamc's in the body of another lamc
 ; {lam {x} {lam {y} {+ x y}}}
 ; --->
