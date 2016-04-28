@@ -18,8 +18,7 @@
 (struct LamC (param body) #:transparent) ; Symbol ExprC
 (struct BooleanC (b) #:transparent)
 
-
-;; Value that represents the result of evaluation:
+;; Value that represents the result of evaluation
 ; (define-type Value (U NumV CloV BooleanV))
 (struct NumV (n) #:transparent) ; Real
 (struct CloV (params body env) #:transparent) ; Symbol ExprC Env
@@ -118,12 +117,19 @@
 ;                Interp
 ; =======================================
 
+;; Determine if a value is a kind of boolean
+; (: isBoolean (exprc -> boolean)
 (define (isBoolean x)
   (match x
     [(BooleanC x) #true]
     [(BooleanV x) #true]
     [other #false]))
 
+(check-equal? (isBoolean (BooleanC 'true)) #true)
+(check-equal? (isBoolean (NumC 3)) #false)
+
+;; Interps a list of args
+; (: interp args (Listof ExprC -> 
 (define (interp-args args env)
   (map (λ (x) (interp x env)) args))
 
@@ -140,7 +146,7 @@
        [(not (isBoolean testResult)) (error "DFLY: if's test must be a boolean. Got ~e" testResult)]
        [else
         (cond
-          [testResult (interp then env)]
+          [(equal? testResult (BooleanV 'true)) (interp then env)] ; can we not use it as the cond test here?
           [else (interp el env)])])]
     [(BinopC name l r)
      (define rVal (interp r env))
@@ -169,13 +175,14 @@
 
 
 ;; Test cases for Interp
-;(check-equal? (interp (ifC (BooleanC 'false) (BooleanC 'true) 1) empty-env) (NumV 1)) 
-;(check-equal? (interp (parse '{if false 0 1}) empty-env) (NumV 1))
+(check-exn #px"DFLY: if's test must be a boolean."
+           (λ () (interp (ifC (NumC 2) 1 2) empty-env)))
 
+(check-equal? (interp (ifC (BooleanC 'false) (BooleanC 'true) (NumC 1)) empty-env) (NumV 1)) 
 (check-equal? (interp (ifC (BooleanC 'true) (NumC 1) (NumC 0)) empty-env) (NumV 1))
 
-;(check-equal? (interp (ifC (BooleanC 'false) (NumC 1) (NumC 0)) empty-env) (NumV 0))
-;(check-equal? (parse '{if true 1 0}) (ifC (BooleanC 'true) (NumC 1) (NumC 0)))
+(check-equal? (interp (ifC (BooleanC 'false) (NumC 1) (NumC 0)) empty-env) (NumV 0))
+; Parse test for ref. (check-equal? (parse '{if true 1 0}) (ifC (BooleanC 'true) (NumC 1) (NumC 0)))
 
 (check-equal? (interp (parse '{<= 3 4}) empty-env) (BooleanV 'true))
 (check-equal? (interp (parse '{<= 9 4}) empty-env) (BooleanV 'false))
