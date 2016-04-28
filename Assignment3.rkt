@@ -128,8 +128,17 @@
     [(IdC i) (hash-ref env i (λ () (error "DFLY: no value found for key" i)))]
     [(BinopC name l r)
      (define rVal (interp r env))
+     (define lVal (interp l env))
      (cond
        [(and (= 0 (NumV-n rVal)) (equal? name 'divide)) (error "DFLY: Cannot divide by 0")]
+       [(equal? name '<=)
+        (cond
+          [(<= (NumV-n lVal) (NumV-n rVal)) (BooleanV 'true)]
+          [else (BooleanV 'false)])]
+       [(equal? name 'eq)
+        (cond
+          [(eq? (NumV-n lVal) (NumV-n rVal)) (BooleanV 'true)]
+          [else (BooleanV 'false)])]
        [else (NumV ((hash-ref Operations name) (NumV-n (interp l env)) (NumV-n (interp r env))))])]
     [(BooleanC bool) (BooleanV bool)]
     [(AppC fun args)
@@ -144,7 +153,12 @@
 
 
 ;; Test cases for Interp
-;(check-equal? (interp (parse 'true)) '
+(check-equal? (interp (parse '{<= 3 4}) empty-env) (BooleanV 'true))
+(check-equal? (interp (parse '{<= 9 4}) empty-env) (BooleanV 'false))
+
+(check-equal? (interp (parse '{eq? 3 4}) empty-env) (BooleanV 'false))
+(check-equal? (interp (parse '{eq? 5 5}) empty-env) (BooleanV 'true))
+
 (check-equal? (interp (parse '{+ 3 4}) empty-env) (NumV 7))
 (check-equal? (interp (parse '{* 3 {+ 4 5}}) empty-env) (NumV 27))
 
@@ -187,9 +201,12 @@
 (define (top-eval s)
   (serialize (interp (parse s) empty-env)))
 
-(check-equal? (top-eval '{+ 2 3}) "5")
+;(check-equal? (top-eval '{lam {+ 2 3}) "5")
 (check-equal? (top-eval 'true) "true")
 
+;(check-equal? (top-eval '{{+ a 3} 2}) "5")
+
+;lam {a b} {+ a b}
 
 ;(define env1
 ;  'meow (CloV (list 'q) (parse '{+ q 1}) empty-env))
