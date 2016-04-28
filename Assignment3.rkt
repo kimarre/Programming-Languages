@@ -86,12 +86,14 @@
      (cond
        [(not (isReserved? fun))
             (AppC (parse fun) (map parse arg))])]
+    ;[(list 'with (list params ...) 
     [other (error "DFLY: Oh noes, input not well-formed")]))
 
 (check-equal? (parse '{lam {a b} true}) (LamC (list 'a 'b) (BooleanC 'true)))
 (check-equal? (parse '{lam {a b} 3}) (LamC (list 'a 'b) (NumC 3)))
 (check-equal? (parse '{lam {x y} {- x y}}) (LamC (list 'x 'y) (BinopC 'minus (IdC 'x) (IdC 'y))))
 (check-equal? (parse '{if {eq? 2 2} 1 0}) (ifC (BinopC 'eq (NumC 2) (NumC 2)) (NumC 1) (NumC 0)))
+(check-equal? (parse '{if true 1 0}) (ifC (BooleanC 'true) (NumC 1) (NumC 0)))
 
 (check-exn #px"DFLY: Oh noes, input not well-formed" (λ () (parse '(16))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(/ 3 4 5))))
@@ -116,6 +118,12 @@
 ;                Interp
 ; =======================================
 
+(define (isBoolean x)
+  (match x
+    [(BooleanC x) #true]
+    [(BooleanV x) #true]
+    [other #false]))
+
 (define (interp-args args env)
   (map (λ (x) (interp x env)) args))
 
@@ -126,6 +134,14 @@
     [(NumC n) (NumV n)]
     [(LamC params body) (CloV params body env)]
     [(IdC i) (hash-ref env i (λ () (error "DFLY: no value found for key" i)))]
+    [(ifC test then el)
+     (define testResult (interp test env))
+     (cond
+       [(not (isBoolean testResult)) (error "DFLY: if's test must be a boolean. Got ~e" testResult)]
+       [else
+        (cond
+          [testResult (interp then env)]
+          [else (interp el env)])])]
     [(BinopC name l r)
      (define rVal (interp r env))
      (define lVal (interp l env))
@@ -153,6 +169,14 @@
 
 
 ;; Test cases for Interp
+;(check-equal? (interp (ifC (BooleanC 'false) (BooleanC 'true) 1) empty-env) (NumV 1)) 
+;(check-equal? (interp (parse '{if false 0 1}) empty-env) (NumV 1))
+
+(check-equal? (interp (ifC (BooleanC 'true) (NumC 1) (NumC 0)) empty-env) (NumV 1))
+
+;(check-equal? (interp (ifC (BooleanC 'false) (NumC 1) (NumC 0)) empty-env) (NumV 0))
+;(check-equal? (parse '{if true 1 0}) (ifC (BooleanC 'true) (NumC 1) (NumC 0)))
+
 (check-equal? (interp (parse '{<= 3 4}) empty-env) (BooleanV 'true))
 (check-equal? (interp (parse '{<= 9 4}) empty-env) (BooleanV 'false))
 
@@ -206,27 +230,9 @@
 
 ;(check-equal? (top-eval '{{+ a 3} 2}) "5")
 
-;lam {a b} {+ a b}
-
-;(define env1
-;  'meow (CloV (list 'q) (parse '{+ q 1}) empty-env))
-
-;(define env2
-;  'moo (NumV 3)
-;  'woof (CloV (list 'q) (parse '{+ q -1}) empty-env))
+;lam {a b} {b {+ 2 3}}
 
 
-
-#;( ;old test cases for interp
-   ;(check-exn #px"DFLY: Interp should not have encountered an IdC on its own. Undefined variable."
-   ;           (λ () (interp (IdC 'x) funs)))
-   (check-equal? (interp (AppC 'add-three (list (NumC 4))) funs) 7)
-   (check-equal? (interp (NumC 6) funs) 6)
-   (check-equal? (interp (BinopC 'plus (NumC 2) (NumC 3)) funs) 5)
-   (check-equal? (interp (BinopC 'mult (NumC 4) (NumC 2)) funs) 8)
-   (check-equal? (interp (ifleq0C (BinopC 'minus (NumC 0) (NumC 1)) (NumC 0) (NumC 1)) funs) 0)
-   (check-equal? (interp (ifleq0C (BinopC 'minus (NumC 1) (NumC 0)) (NumC 0) (NumC 1)) funs) 1)
-)
 
 
 ; parse {with 4} is valid (same for interp)
