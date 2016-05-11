@@ -54,10 +54,6 @@
 ; Determine if a symbol being used is part of our language already
 (define (isReserved? x)
   (cond
-;    [(equal? '/ x) (error "DFLY: Cannot use reserved function name.")]
-;    [(equal? '* x) (error "DFLY: Cannot use reserved function name.")]
-;    [(equal? '+ x) (error "DFLY: Cannot use reserved function name.")]
-;    [(equal? '- x) (error "DFLY: Cannot use reserved function name.")]
     [(equal? 'if x) (error "DFLY: Cannot use reserved function name.")]
     [else #false]))
 
@@ -78,28 +74,25 @@
 ;(: parse (Sexp -> ExprC))
 (define (parse sexp)
   (match sexp
-    [(list 'with (list params '= args) ... body) ; <-- this is the right form, but map wat
-     
-     (AppC (LamC params (parse body))
-           (map (λ (arg) (parse arg)) args))] ; just (map parse args)?
-     ;(define argList (map (λ (arg) arg) args))
-     ;(define param list (map λ (param) param) 
-     
+    [(list 'with (list params '= args) ... body)
+     (cond
+       [(check-duplicates params) (error "DFLY: Cannot have duplicate params")]
+       [else 
+        (AppC (LamC params (parse body))
+              (map (λ (arg) (parse arg)) args))])]
     [(? real? n) (NumC n)]
-    [(list 'lam (list (? symbol? params) ...) body)
-     (LamC params (parse body))]
+    [(list 'lam (list params ...) body)
+     (cond
+       [(check-duplicates params) (error "DFLY: Cannot have two parameters with the same name")]
+       [else (LamC params (parse body))])]
     [(? symbol? x)
      (cond
        [(not (isReserved? x)) (IdC x)])]
     [(list 'if test then el)
        (ifC (parse test) (parse then) (parse el))]
-    ;[(list '+ l r) (BinopC 'plus (parse l) (parse r))]
-;    [(list '- l r) (BinopC 'minus (parse l) (parse r))]
-;    [(list '* l r) (BinopC 'mult (parse l) (parse r))]
-;    [(list '/ l r) (BinopC 'divide (parse l) (parse r))]
     [(list 'eq? l r) (BinopC 'eq (parse l) (parse r))]
     ((list '<= l r) (BinopC '<= (parse l) (parse r)))
-    [(list (? symbol? fun) arg ...)
+    [(list fun arg ...)
      (cond
        [(not (isReserved? fun))
             (AppC (parse fun) (map parse arg))])]
@@ -110,18 +103,17 @@
                             {+ z y}})
               (AppC (LamC (list 'z 'y) (AppC (IdC '+) (list (IdC 'z) (IdC 'y)))) (list (NumC 9) (NumC 10))))
 
+(check-exn #px"DFLY: Cannot have two parameters with the same name" (λ () (parse '(lam (x x) 3))))
 
 (check-equal? (parse '{lam {a b} 3}) (LamC (list 'a 'b) (NumC 3)))
 (check-equal? (parse '{lam {x y} {- x y}}) (LamC (list 'x 'y) (AppC (IdC '-) (list (IdC 'x) (IdC 'y)))))
 (check-equal? (parse '{if {eq? 2 2} 1 0}) (ifC (BinopC 'eq (NumC 2) (NumC 2)) (NumC 1) (NumC 0)))
 
-(check-exn #px"DFLY: Oh noes, input not well-formed" (λ () (parse '(16))))
-;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(/ 3 4 5))))
-;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ cat dog poop))))
-;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(* 3))))
-;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(- 3 4 5))))
-;(check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(+ / 3))))
+(check-exn #px"DFLY: Oh noes, input not well-formed" (λ () (parse '(#true))))
 (check-exn #px"DFLY: Cannot use reserved function name." (λ () (parse '(if / 3))))
+(check-exn #px"DFLY: Cannot have duplicate params" (λ () (parse '(with (z = (lam () 3))
+                                           (z = 9)
+                                           (z)))))
 
 
 (check-equal? (parse '{+ 1 2}) (AppC (IdC '+) (list (NumC 1) (NumC 2))))
@@ -161,27 +153,37 @@
     [(BinopC name l r)
      (define rVal (interp r env))
      (define lVal (interp l env))
-     (cond
-       [(equal? name 'eq)
-        (cond
-          [(eq? (NumV-n lVal) (NumV-n rVal)) (BooleanV 'true)]
-          [else (BooleanV 'false)])]
-       [(and (= 0 (NumV-n rVal)) (equal? name 'divide)) (error "DFLY: Cannot divide by 0")]
-       [(equal? name '<=)
-        (cond
-          [(<= (NumV-n lVal) (NumV-n rVal)) (BooleanV 'true)]
-          [else (BooleanV 'false)])]
-       
-       [else (NumV ((hash-ref Operations name) (NumV-n lVal) (NumV-n rVal)))])]
+     (match lVal
+       [(NumV lVal)
+        (match rVal
+          [(NumV rVal)
+           (cond
+             [(equal? name 'eq)
+              (cond
+                [(eq? lVal rVal) (BooleanV 'true)]
+                [else (BooleanV 'false)])]
+             [(and (= 0 rVal) (equal? name 'divide)) (error "DFLY: Cannot divide by 0")]
+             [(equal? name '<=)
+              (cond
+                [(<= lVal rVal) (BooleanV 'true)]
+                [else (BooleanV 'false)])]
+             
+             [else (NumV ((hash-ref Operations name) lVal rVal))])]
+          [other (error "DFLY: Cannot binop without a number")])]
+        [other (error "DFLY: Cannot binop without a number")])]
     [(AppC fun args)
      (match (interp fun env)
        [(CloV params body clo-env)
-        (interp body (foldl  ; returns a new env containing the param/arg pairs
-                      (λ (param arg new-env)
-                        (hash-set new-env param arg))
-                      clo-env
-                      params
-                      (interp-args args env)))])]))
+        (cond
+          ; If the num args doesn't match num params
+          [(= (length params) (length args))
+           (interp body (foldl  ; returns a new env containing the param/arg pairs
+                         (λ (param arg new-env)
+                           (hash-set new-env param arg))
+                         clo-env
+                         params
+                         (interp-args args env)))]
+          [else  (error "DFLY: wrong number of arguments given")])])]))
 
 ; TODO: modify and put these tests back in
 (check-equal? (interp (parse '{<= 3 4}) top-env) (BooleanV 'true))
@@ -224,7 +226,7 @@
   (match x
     [(NumV n) (~v n)]
     [(NumC n) (~v n)]
-    [(CloV params body env) "<#procedure>"]
+    [(CloV params body env) "#<procedure>"]
     [(BooleanV bool)
      (cond
        [(equal? bool 'true) "true"]
@@ -232,21 +234,31 @@
 
 (check-equal? (serialize (NumC 2)) "2")
 (check-equal? (serialize (NumV 1)) "1")
-(check-equal? (serialize (CloV (list 'x) (parse '{+ 1 2}) top-env)) "<#procedure>")
+(check-equal? (serialize (CloV (list 'x) (parse '{+ 1 2}) top-env)) "#<procedure>")
 (check-equal? (serialize (BooleanV 'true)) "true")
 (check-equal? (serialize (BooleanV 'false)) "false")
 
 ;; Combine parsing and evaluation
-; (: top-eval (sexp -> string)
-(define (top-eval s)
+; (: top-interp (sexp -> string)
+(define (top-interp s)
   (serialize (interp (parse s) top-env)))
 
-;(check-equal? (top-eval '{lam {+ 2 3}}) "5")
-(check-equal? (top-eval 'true) "true")
+;(check-equal? (top-interp '{lam {+ 2 3}}) "5")
+(check-equal? (top-interp 'true) "true")
+
+(check-exn #px"DFLY: wrong number of arguments given"
+           (λ () (top-interp '((lam () 9) 17))))
+
+(check-exn #px"DFLY: Cannot binop without a number"
+           (λ () (top-interp '(+ + +))))
+
+
+(check-exn #px"DFLY: Cannot binop without a number"
+           (λ () (top-interp '(+ 3 +))))
 
 ;lam {a b} {b {+ 2 3}}
 
 ; Captain Teach:
-(check-equal? (top-eval
+(check-equal? (top-interp
                '{with {x = 9}
                       {+ x 1}}) "10")
