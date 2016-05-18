@@ -16,7 +16,6 @@
 
 ;(define-type ExprC (U NumC IdC BinopC AppC ifC FundefC))
 (struct NumC (n) #:transparent)
-(struct StringC (s) #:transparent)
 (struct IdC (x) #:transparent)
 (struct AppC (fun args) #:transparent) ; use of a function (call)
 (struct ifC (test then else) #:transparent)
@@ -28,7 +27,6 @@
 (struct NumV (n) #:transparent) ; Real
 (struct CloV (params body env) #:transparent) ; Symbol ExprC Env
 (struct BooleanV (val) #:transparent)
-(struct StringV (s) #:transparent)
 
 ;; an Environment is a hash table mapping symbols to values
 ;(define-type Env (HashTable Symbol Value))
@@ -83,7 +81,6 @@
         (AppC (LamC params (parse body))
               (map (λ (arg) (parse arg)) args))])]
     [(? real? n) (NumC n)]
-    [(? string? s) (StringC s)]
     [(list 'lam (list params ...) body)
      (cond
        [(check-duplicates params) (error "DFLY: Cannot have two parameters with the same name")]
@@ -118,9 +115,6 @@
                                            (z = 9)
                                            (z)))))
 
-;(check-exn #px"DFLY: " (λ () (parse '(+ + +))))
-
-(check-equal? (parse "meow") (StringC "meow"))
 
 (check-equal? (parse '{+ 1 2}) (AppC (IdC '+) (list (NumC 1) (NumC 2))))
 (check-equal? (parse '{* 2 3}) (AppC (IdC '*) (list (NumC 2) (NumC 3))))
@@ -149,7 +143,6 @@
 (define (interp expr env)
   (match expr
     [(NumC n) (NumV n)]
-    [(StringC s) (StringV s)]
     [(LamC params body) (CloV params body env)]
     [(IdC i) (hash-ref env i (λ () (error "DFLY: no value found for key" i)))]
     [(ifC test then el)
@@ -192,12 +185,11 @@
                          (interp-args args env)))]
           [else  (error "DFLY: wrong number of arguments given")])])]))
 
-
+; TODO: modify and put these tests back in
 (check-equal? (interp (parse '{<= 3 4}) top-env) (BooleanV 'true))
 (check-equal? (interp (parse '{<= 9 4}) top-env) (BooleanV 'false))
 (check-equal? (interp (ifC (IdC 'false) (IdC 'true) (AppC (IdC '+) (list (NumC 1) (NumC 2)))) top-env) (NumV 3)) 
-(check-equal? (interp (ifC (IdC 'true) (IdC 'false) (AppC (IdC '+) (list (NumC 1) (NumC 2)))) top-env) (BooleanV 'false))
-(check-equal? (interp (parse "roar") top-env) (StringV "roar"))
+(check-equal? (interp (ifC (IdC 'true) (IdC 'false) (AppC (IdC '+) (list (NumC 1) (NumC 2)))) top-env) (BooleanV 'false)) 
 
 (check-equal? (interp (parse '{eq? 3 4}) top-env) (BooleanV 'false))
 (check-equal? (interp (parse '{eq? 5 5}) top-env) (BooleanV 'true))
@@ -234,7 +226,6 @@
   (match x
     [(NumV n) (~v n)]
     [(NumC n) (~v n)]
-    [(StringV s) s]
     [(CloV params body env) "#<procedure>"]
     [(BooleanV bool)
      (cond
@@ -246,29 +237,28 @@
 (check-equal? (serialize (CloV (list 'x) (parse '{+ 1 2}) top-env)) "#<procedure>")
 (check-equal? (serialize (BooleanV 'true)) "true")
 (check-equal? (serialize (BooleanV 'false)) "false")
-(check-equal? (serialize (StringV "poop")) "poop")
 
 ;; Combine parsing and evaluation
-; (: top-eval (sexp -> string)
-(define (top-eval s)
+; (: top-interp (sexp -> string)
+(define (top-interp s)
   (serialize (interp (parse s) top-env)))
 
-;(check-equal? (top-eval '{lam {+ 2 3}}) "5")
-(check-equal? (top-eval 'true) "true")
+;(check-equal? (top-interp '{lam {+ 2 3}}) "5")
+(check-equal? (top-interp 'true) "true")
 
 (check-exn #px"DFLY: wrong number of arguments given"
-           (λ () (top-eval '((lam () 9) 17))))
+           (λ () (top-interp '((lam () 9) 17))))
 
 (check-exn #px"DFLY: Cannot binop without a number"
-           (λ () (top-eval '(+ + +))))
+           (λ () (top-interp '(+ + +))))
 
 
 (check-exn #px"DFLY: Cannot binop without a number"
-           (λ () (top-eval '(+ 3 +))))
+           (λ () (top-interp '(+ 3 +))))
 
 ;lam {a b} {b {+ 2 3}}
 
 ; Captain Teach:
-(check-equal? (top-eval
+(check-equal? (top-interp
                '{with {x = 9}
                       {+ x 1}}) "10")
